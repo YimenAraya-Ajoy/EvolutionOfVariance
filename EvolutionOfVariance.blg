@@ -1,0 +1,50 @@
+This is BibTeX, Version 0.99d (TeX Live 2019/Debian)
+Capacity: max_strings=200000, hash_size=200000, hash_prime=170003
+The top-level auxiliary file: EvolutionOfVariance.aux
+The style file: evolution.bst
+Database file #1: library.bib
+Warning--can't use both author and editor fields in Krebs1997a
+Warning--can't use both volume and number fields in Krebs1997a
+Warning--missing publisher in Lehtonen2017
+You've used 21 entries,
+            2811 wiz_defined-function locations,
+            752 strings with 8128 characters,
+and the built_in function-call counts, 15818 in all, are:
+= -- 1398
+> -- 498
+< -- 17
++ -- 192
+- -- 171
+* -- 1370
+:= -- 2368
+add.period$ -- 41
+call.type$ -- 21
+change.case$ -- 158
+chr.to.int$ -- 21
+cite$ -- 24
+duplicate$ -- 1270
+empty$ -- 1332
+format.name$ -- 236
+if$ -- 3171
+int.to.chr$ -- 1
+int.to.str$ -- 1
+missing$ -- 186
+newline$ -- 87
+num.names$ -- 84
+pop$ -- 332
+preamble$ -- 1
+purify$ -- 141
+quote$ -- 0
+skip$ -- 267
+stack$ -- 0
+substring$ -- 1445
+swap$ -- 447
+text.length$ -- 2
+text.prefix$ -- 0
+top$ -- 0
+type$ -- 174
+warning$ -- 3
+while$ -- 108
+width$ -- 0
+write$ -- 251
+(There were 3 warnings)
