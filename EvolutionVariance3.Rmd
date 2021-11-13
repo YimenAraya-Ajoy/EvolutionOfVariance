@@ -13,7 +13,6 @@ require(dplyr)
 require(INLA)
 ```
 
-
 ```{r simulatePedigree, include=FALSE}
 simPed<-function(n=100, gen=5, nrep=10, Va=1, VBd=1, Vxd=1, VBr=1, Vxr=1, Br=4, Bd=4, xd_bar=4, xr_bar=4){
 ped<-list()
@@ -246,6 +245,49 @@ mod1.Inla = inla(formula=formula, family="gaussian",
   res
 }
 
+
+animal1mm<-function(x){
+  ped<-x[-which(duplicated(x$ID)),c(3,2,1)]
+  colnames(ped)<-c("animal","dam", "sire")
+  ped$sire[ped$sire==0]<-NA
+  ped$dam[ped$dam==0]<-NA  
+  
+  mod<-lmer(z~(1|ID), data=x)
+  x3<-data.frame(ID=as.numeric(row.names(coef(mod)$ID)), z=unlist(ranef(mod)$ID))
+x3$z2<-x3$z^2
+#x3$dev1<-x3$dev1-mean(x3$dev1)   
+colnames(ped)<-c("ID","dam.id","sire.id")
+
+Cmatrix <- inverseA(ped[,c("ID","dam.id","sire.id")])$Ainv
+ainv<-inverseA(ped[,])
+
+prec.1 = list(initial=log(1/2), prior="pc.prec",param=c(1,0.05), fixed=FALSE)
+prec.2=list( param = c(0.1,0.01))
+prec.3 = list(param = c(0.5, 0.5), fixed = FALSE)
+
+
+formula = z2 ~ 1  +
+  f(ID,model="generic0",
+    Cmatrix=Cmatrix,
+    hyper=list(
+      prec=prec.3 
+    )
+  )
+
+
+
+mod1.Inla = inla(formula=formula, family="gaussian",
+                 data=x3,
+                 control.compute=list(dic=T, config=T)
+)
+
+
+  # summary(mod)
+  res<-data.frame(Va=1/mod1.Inla$summary.hyperpar$`0.5quant`[2]
+)
+  res
+}
+
 animal2<-function(x){
   ped<-x[-which(duplicated(x$ID)),c(3,2,1)]
   colnames(ped)<-c("animal","dam", "sire")
@@ -298,22 +340,22 @@ mod1.Inla = inla(formula=formula, family="gaussian",
 
 ##Disruptive Selection No variance in Slopes
 ```{r DisruptiveSelectionNoVSlopes, cache=TRUE}
-nsim=100
+nsim=50
 LastGen<-NewGen<-OldGens<-list() 
 maxW<-rep(NA, nsim)
 
 Br=1
-Bd=4
-xd_bar=2
-xr_bar=1
+Bd=1
+xd_bar=0
+xr_bar=0
 
-Va=2
+Va=0.5
 
-VBd=0
-Vxd=0.2
+VBd=0.2
+Vxd=1
 
 VBr=0
-Vxr=1
+Vxr=0.01
 
 ##Selection
 Bl=0 
@@ -333,7 +375,6 @@ maxW[i]<-res2$par$mw
 ```
 
 ```{r DisruptiveSelectionNoVSlopesObsV, include=FALSE}
-
 vE1<-do.call(rbind.data.frame, mclapply(OldGens, obs.var2, mc.cores=4))
 vE2<-do.call(rbind.data.frame, mclapply(NewGen, obs.var2, mc.cores=4))
 vOb1<-do.call(rbind.data.frame, mclapply(OldGens, obs.var, mc.cores=4))
@@ -343,8 +384,9 @@ Betas<-do.call(rbind.data.frame, mclapply(LastGen, selAn, mc.cores=4))
 
 ```{r DisruptiveSelectionNoVSlopesEstV, include=FALSE, cache=TRUE}
 EVmean.1<-do.call(rbind.data.frame, mclapply(OldGens, animal, mc.cores=4))
-EVdev1.1<-do.call(rbind.data.frame, mclapply(OldGens, animal1, mc.cores=4))
-EVdev2.1<-do.call(rbind.data.frame, mclapply(OldGens, animal2, mc.cores=4))
+EVdev1.1<-do.call(rbind.data.frame, mclapply(OldGens, animal1mm, mc.cores=4))
+#EVdev2.1<-do.call(rbind.data.frame, mclapply(OldGens, animal1mm, mc.cores=4))
+
 ```
 
 Generated among individual variance
@@ -365,7 +407,16 @@ Va + Bd^2*VBd
 
 mean(2*EVmean.1$Va^2)
 2*(Va + Bd^2*VBd)^2
-  
+
+Va^2 + 4*(Va + VBd*Vxd + Vxd) + (VBd*Vxd + Vxd)^2   
+
+Va^2 + 4*Vbd*Vxd^2   
+
+4*Vbd*Vxd^2
+
+hist(EVdev1.1$Va)
+mean(EVdev1.1$Va)
+
 ```
 
 Generated selection 
@@ -537,27 +588,27 @@ nsim=100
 LastGen<-NewGen<-OldGens<-list() 
 maxW<-rep(NA, nsim)
 
-Br=2
-Bd=4
-xd_bar=2
+Br=1
+Bd=1
+xd_bar=0
 xr_bar=0
 
 Va=2
 
 VBd=0
-Vxd=0.5
+Vxd=0.2
 
-VBr=0.2
+VBr=0
 Vxr=1
 
 ##Selection
 Bl=0 
 Bq=0
 BBd=0 
-BBr=-2
+BBr=0
 
 for(i in 1:nsim){
-res1<-simPed(n=200, gen=4, nrep=10, Va=Va, VBd=VBd, Vxd=Vxd, VBr=VBr, Vxr=Vxr, Br=Br, Bd=Bd, xd_bar=xd_bar, xr_bar=xr_bar)
+res1<-simPed(n=150, gen=5, nrep=100, Va=Va, VBd=VBd, Vxd=Vxd, VBr=VBr, Vxr=Vxr, Br=Br, Bd=Bd, xd_bar=xd_bar, xr_bar=xr_bar)
 OldGens[[i]]<-res1$d2
 res2<-selection(res1, Bl=Bl, Bq=Bq, BBd=BBd, BBr=BBr)
 NewGen[[i]]<-res2$d4
@@ -577,8 +628,8 @@ Betas<-do.call(rbind.data.frame, mclapply(LastGen, selAn, mc.cores=4))
 
 ```{r StabilitySelectionVSlopesEstV, include=FALSE, cache=TRUE}
 EVmean.3<-do.call(rbind.data.frame, mclapply(OldGens, animal, mc.cores=4))
-#EVdev1.3<-do.call(rbind.data.frame, mclapply(OldGens, animal1, mc.cores=4))
-EVdev2.3<-do.call(rbind.data.frame, mclapply(OldGens, animal2, mc.cores=4))
+EVdev1.3<-do.call(rbind.data.frame, mclapply(OldGens, animal1, mc.cores=4))
+#EVdev2.3<-do.call(rbind.data.frame, mclapply(OldGens, animal2, mc.cores=4))
 ```
 
 Generated among individual variance
@@ -587,8 +638,15 @@ Va + Vxd*VBd + xd_bar^2*VBd + Bd^2*Vxd
 mean(vOb1$VID)
 mean(vE1$VID)
 
+VPe = Vxd*VBd + xd_bar^2*VBd + Bd^2*Vxd
+
 2*(Va + Vxd*VBd + xd_bar^2*VBd + Bd^2*Vxd)^2
+
+2*Va^2 + 2*(VPe*Va + VPe) + 2*VPe^2
+
 2*mean(vOb1$VID)^2
+mean(vOb1$VIDsqrt)
+
 2*mean(vE1$VID)^2
 ```
 
@@ -599,7 +657,11 @@ Va + Bd^2*VBd
 
 mean(2*EVmean.3$Va^2)
 2*(Va + Bd^2*VBd)^2
-  
+
+mean(EVdev1.3$Va)
+
+
+VBd  
 ```
 
 Generated selection 

@@ -1,16 +1,15 @@
 library(AGHmatrix)
 library(hglm)
 library(rstan)
-setwd("/home/yi/Dropbox/Evolutionofvariance")
 
 Br=1
 Bd=1
 xd_bar=0
 xr_bar=0
 
-Va=2
+Va=1
 
-VBd=0
+VBd=1
 Vxd=1
 
 VBr=0
@@ -202,19 +201,19 @@ generated quantities{
 
 
 Br=1
-Bd=0
+Bd=1
 xd_bar=0
 xr_bar=0
 
-Va=2
+Va=0.5
 
-VBd=0
-Vxd=0
+VBd=0.2
+Vxd=1
 
 VBr=0
 Vxr=0.5
 
-res1<-simPed(n=50, gen=5, nrep=6, Va=Va, VBd=VBd, Vxd=Vxd, VBr=VBr, Vxr=Vxr, Br=Br, Bd=Bd, xd_bar=xd_bar, xr_bar=xr_bar)
+res1<-simPed(n=40, gen=5, nrep=4, Va=Va, VBd=VBd, Vxd=Vxd, VBr=VBr, Vxr=Vxr, Br=Br, Bd=Bd, xd_bar=xd_bar, xr_bar=xr_bar)
 x<-res1$d2
 x$ob<-1:nrow(x)
 
@@ -234,25 +233,91 @@ stan_data = list(Y = x$z,
                  N = nrow(x),
                  ID=x$ID)
 
-inits <- function() list(sigma_G = runif(1, 0.01, 3),
-                         sigma_R = runif(1, 0.01, 3),
-                         sigma_I = runif(1, 0.01, 3))
+inits <- function() list(sigma_G = runif(1, 0.1, 3),
+                         sigma_R = runif(1, 0.1, 3),
+                         sigma_I = runif(1, 0.1, 3))
 
-ni <- 2000
+ni <- 1000
 nt <- 2
-nb <- 1000
-nc <- 1
-params<-c("sigma2_G", "sigma2_I", "sigma2_E")
+nb <- 100
+nc <- 2
+params<-c("sigma2_G","sigma2_G2", "sigma2_G2n", "sigma2_I", "sigma2_R")
+params<-c("sigma2_G", "sigma2_I", "sigma2_R")
 
 ## Call Stan from R
-md3 <- stan("/home/yi/Dropbox/Evolutionofvariance/ME3.stan", data = stan_data, init = inits, pars = params,
-            chains = nc, iter = ni, warmup = nb, thin = nt, cores=1)
+md3 <- stan("/home/yi/Dropbox/EvolutionOfVariance/StanModels/ME3.stan", data = stan_data, init = inits, pars = params,
+            chains = nc, iter = ni, warmup = nb, thin = nt, cores=2)
 
 
 summary(md3)$summary
 
 
-xwrite(
+write(
+  "data {
+  int<lower=1>    K; // number of individuals
+  int<lower=1>    N; // number of observations
+  matrix[N,K]     Z; // Random effects design matrix
+  matrix[K,K]     Z2; // Random effects design matrix2
+  vector[N]       Y; // response variable
+  matrix[K,K]     A; // relationship matrix
+}
+
+transformed data{
+  matrix[K,K] LA;
+  LA = cholesky_decompose(A);
+}
+
+parameters {
+  vector[K]  a_decompose; // standardized breeding values
+  vector[K]  I_z; // standardized breeding values
+  
+
+  real<lower=0> sigma_I; // Individual standard deviation
+  real<lower=0> sigma_R; // residual standard deviation
+  real<lower=0> sigma_G; // genetic standard deviation for squared values
+
+  real b1; //mean of observed trait
+}
+
+transformed parameters{
+vector[K] I;  // breeding values for squared individual values
+vector[K] a;  // breeding values for squared individual values
+a = sigma_G * (LA * a_decompose);
+I = sigma_I * I_z;
+}
+
+model {
+vector[N] mu1; // expected observation values
+
+target += normal_lpdf(a_decompose  | 0, 1); 
+target += normal_lpdf(I_z  | 0, 1); 
+
+mu1 = b1 + Z*a + Z*I; // Effect of the individual average on phenotype expression
+
+target += normal_lpdf(Y  | mu1, sigma_R);   //model for phenotype
+
+//Priors
+b1~normal(0,1);
+
+target +=inv_gamma_lpdf(sigma_I  | 1, 1);
+target +=inv_gamma_lpdf(sigma_R  | 1, 1);
+target += inv_gamma_lpdf(sigma_G  | 1, 1);
+}
+
+generated quantities{
+  real sigma2_G;
+ real sigma2_I;
+  real sigma2_R;
+  
+  sigma2_G = sigma_G*sigma_G;
+  sigma2_I = sigma_I * sigma_I; // individual variance
+  sigma2_R = sigma_R * sigma_R; // residual variance
+}"
+, "/home/yi/Dropbox/EvolutionOfVariance/StanModels/ME3.stan")
+
+
+
+write(
   "data {
   int<lower=1>    K; // number of individuals
   int<lower=1>    N; // number of observations
@@ -270,99 +335,20 @@ transformed data{
 
 parameters {
   vector[K]  a_decompose; // standardized breeding values
-  vector[K] I; // individual deviations 
-  vector[K] I2b; // individual deviations 
-  
-  real b1; //mean of observed trait
-  real b2; //mean of observed trait
+  vector[K]  a_decompose2; // standardized breeding values
+  vector[K] I;  // breeding values for squared individual values
 
   real<lower=0> sigma_I; // Individual standard deviation
   real<lower=0> sigma_R; // residual standard deviation
   real<lower=0> sigma_R2; // residual standard deviation
- 
+  
   real<lower=0> sigma_G; // genetic standard deviation for squared values
+  real<lower=0> sigma_G2; // genetic standard deviation for squared values
   real<lower=0> sigma_I2; // environment standard deviation for sq values
-}
 
-transformed parameters{
-  vector[K] I2; // squared of individual deviations
-  for(j in 1:K){ // Calculate squared values of the mean deviations
-  I2[j] =  I[j];  
-   }
-}
-
-model {
-vector[N] mu1; // expected observation values
-vector[N] mu2; // expected squared values
-vector[K] muI2; // expected mean squared values
-vector[K] a;  // breeding values for squared individual values
-
-a = sigma_G * (LA * a_decompose);
-target += normal_lpdf(a_decompose  | 0, 1); 
-target += normal_lpdf(I  | 0, sigma_I);   
-
-mu1 = b1 + Z*I; // Effect of the individual average on phenotype expression
-muI2 =  b2 + Z2*a;  // Effect of a on the average squared deviation
-mu2 = Z*muI2;
-  
-target += normal_lpdf(Y  | mu1, sigma_R);   //model for phenotype
-target += normal_lpdf(I2  | muI2, sigma_I2); //model for squared
-target += normal_lpdf(Y2  | mu2, sigma_R2);  //model for squared
- 
-//Priors
-b1~normal(0,1);
-b2~normal(0,1);
-
-target +=inv_gamma_lpdf( sigma_I  | 1, 1);
-target +=inv_gamma_lpdf( sigma_R  | 1, 1);
-target +=inv_gamma_lpdf( sigma_R2  | 1, 1);
-
-target += inv_gamma_lpdf( sigma_G  | 1, 1);
-target +=inv_gamma_lpdf( sigma_I2  | 1, 1);
- 
-}
-
-generated quantities{
-  real sigma2_G;
-  real sigma2_E; 
-  real sigma2_I;
-  
-  sigma2_G = sigma_G*sigma_G;
-  sigma2_I = sigma_I * sigma_I; // individual variance
-  sigma2_E = sigma_R * sigma_R; // residual variance
-}"
-, "/home/yi/Dropbox/Evolutionofvariance/ME3.stan")
-
-
-
-write(
-  "data {
-  int<lower=1>    K; // number of individuals
-  int<lower=1>    N; // number of observations
-  matrix[N,K]     Z; // Random effects design matrix
-  matrix[K,K]     Z2; // Random effects design matrix
-  vector[N]       Y; // response variable
-  matrix[K,K]     A; // relationship matrix
-}
-
-transformed data{
-  matrix[K,K] LA;
-  LA = cholesky_decompose(A);
-}
-
-parameters {
-  vector[K]  a_decompose; // standardized breeding values
-  vector[K] I; // individual deviations 
-  
   real b1; //mean of observed trait
-  real b2; //mean of observed trait
-
-  real<lower=0> sigma_I; // Individual standard deviation
-  real<lower=0> sigma_R; // residual standard deviation
-  
-  real<lower=0> sigma_G; // genetic standard deviation for squared values
-  real<lower=0> sigma_I2; // environment standard deviation for sq values
 }
+
 
 transformed parameters{
   vector[K] I2; // squared of individual deviations
@@ -371,44 +357,54 @@ transformed parameters{
    }
 }
 
+
 model {
 vector[N] mu1; // expected observation values
+vector[N] mu2; // expected squared values
 vector[K] muI2; // expected mean squared values
 vector[K] a;  // breeding values for squared individual values
+vector[K] a2;  // breeding values for squared individual values
 
 a = sigma_G * (LA * a_decompose);
+a2 = sigma_G2 * (LA * a_decompose2);
+
 target += normal_lpdf(a_decompose  | 0, 1); 
-target += normal_lpdf(I  | 0, sigma_I);   
-   
-mu1 = b1 + Z*I; // Effect of the individual average on phenotype expression
-muI2 =  b2 + Z2*a;  // Effect of a on the average squared deviation
+target += normal_lpdf(a_decompose2  | 0, 1); 
+target += normal_lpdf(I  | 0, sigma_I); 
+
+mu1 = b1 + Z*a + Z*I; // Effect of the individual average on phenotype expression
+muI2 =  sigma_I^2 + Z2*a2;  // Effect of a on the average squared deviation
+mu2 = Z*muI2;
 
 target += normal_lpdf(Y  | mu1, sigma_R);   //model for phenotype
 target += normal_lpdf(I2  | muI2, sigma_I2); //model for squared
+target += normal_lpdf(Y2  | mu2, sigma_R2); //model for squared
 
 //Priors
 b1~normal(0,1);
-b2~normal(0,1);
 
-target +=inv_gamma_lpdf( sigma_I  | 1, 1);
-target +=inv_gamma_lpdf( sigma_R  | 1, 1);
-
-target += inv_gamma_lpdf( sigma_G  | 1, 1);
+target +=inv_gamma_lpdf(sigma_I  | 1, 1);
+target +=inv_gamma_lpdf(sigma_R  | 1, 1);
+target +=inv_gamma_lpdf(sigma_R2  | 1, 1);
+target += inv_gamma_lpdf(sigma_G  | 1, 1);
+target += inv_gamma_lpdf(sigma_G2  | 1, 1);
 target +=inv_gamma_lpdf( sigma_I2  | 1, 1);
  
 }
 
 generated quantities{
   real sigma2_G;
-  real sigma2_E; 
+  real sigma2_G2;
+  real sigma2_G2n;
   real sigma2_I;
+  real sigma2_R;
   
+  sigma2_G = sigma_G*sigma_G;
+  sigma2_G2 = sigma_G2*sigma_G2;
   sigma2_I = sigma_I * sigma_I; // individual variance
-  sigma2_E = sigma_R * sigma_R; // residual variance
+  sigma2_G2n=(exp(sigma2_G2)-1) * exp(2*log(sigma_I^2) + sigma2_G2);
+  sigma2_R = sigma_R * sigma_R; // residual variance
 }"
-, "/home/yi/Dropbox/Evolutionofvariance/ME3.stan")
-
-
-
+, "/home/yi/Dropbox/EvolutionOfVariance/StanModels/ME3.stan")
 
 
