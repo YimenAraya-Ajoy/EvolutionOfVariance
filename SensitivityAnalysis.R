@@ -37,31 +37,26 @@ write(
       // Random effects
        vector<lower=0>[2]      sigma_I; // intercepts and log residual standard deviation for each individual
        cholesky_factor_corr[2] L;  // factor to estimate covariance between intercepts and log residual standard deviation for each individual
-       real<lower=0> sigma_w;
     }
     
    transformed parameters{
     real<lower=0> sigma_e[nind];
     row_vector[nind] sigma2_e;
-     
+    real mu_t[N];
+    real mu_v[nind];
+      
     matrix[2,nind] I; //  Unsclaed blups intercept and slope for w island year
     I  = diag_pre_multiply(sigma_I, L) * zI; // get the unscaled value
     
    for (i in 1:nind){
      sigma_e[i] = exp(m_lsigma_e + I[2, i]);
      sigma2_e[i] = sigma_e[i]^2;
-                     }
-   }
-    
+      mu_t[i] = c + I[1,i];
+      mu_v[i] = alpha + beta*I[1,i] + delta*I[1,i]^2 + eta*sigma2_e[i];
+                    }
+                      }
+
    model{
-      real mu_t[N];
-      real mu_v[nind];
-      
-      for (j in 1:nind) {
-        mu_t[j] = c + I[1,j];
-        mu_v[j] = alpha + beta*I[1,j] + delta*I[1,j]^2 + eta*sigma2_e[j];
-      }
-    
       // Random effects distribution
       to_vector(zI) ~ normal(0, 1);
       alpha ~ normal(0, 1);
@@ -71,16 +66,15 @@ write(
       
       to_vector(sigma_I) ~ normal(0, 1);
       m_lsigma_e ~ normal(0, 1);
-      L ~ lkj_corr_cholesky(4);
+      L ~ lkj_corr_cholesky(2);
   
       // Likelihood part of Bayesian inference
       for (i in 1:N) {
         t[i] ~ normal(mu_t[ID[i]], sigma_e[ID[i]]);    
                      }
     
-    for (i in 1:nind) {
-        w[i] ~ poisson(exp(mu_v[i]));    
-                      }
+        w ~ poisson(exp(mu_v));    
+                      
                        }"
   , "ME2.stan")
 
