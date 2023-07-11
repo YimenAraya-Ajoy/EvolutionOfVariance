@@ -78,7 +78,6 @@ write(
       // Random effects
        vector<lower=0>[2]      sigma_I; // intercepts and log residual standard deviation for each individual
        cholesky_factor_corr[2] L;  // factor to estimate covariance between intercepts and log residual standard deviation for each individual
-       real<lower=0> sigma_w;
     }
     
    transformed parameters{
